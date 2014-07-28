@@ -5,7 +5,7 @@
 #-------------------------------------------------
 
 QT       += core
-
+CONFIG += console
 
 TARGET = mavlinkgen_qt
 TEMPLATE = app
