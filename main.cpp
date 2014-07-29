@@ -73,7 +73,7 @@ bool compare(const QPair<QString,QString> &first, const QPair<QString,QString> &
 	}
 	if (lengths.contains(firststr) && lengths.contains(secondstr))
 	{
-		return lengths.value(firststr) >= lengths.value(secondstr);
+		return lengths.value(firststr) > lengths.value(secondstr);
 	}
 	else
 	{
@@ -126,7 +126,7 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 								}
 								xml.readNext();
 							}
-							qSort(fieldlist.begin(),fieldlist.end(),compare);
+							qStableSort(fieldlist.begin(),fieldlist.end(),compare);
 							QString propertychunk = "";
 							QString getchunk = "";
 							QString setchunk = "";
@@ -213,22 +213,12 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 									int charlen = fieldname.remove(charstr).remove("[").remove("]").toInt();
 									arraysize = charlen;
 									int length = lengths[charstr];
-									converter += "        " +  charstr + " " + fieldlist.at(i).second + "[" + QString::number(charlen) + "];\r\n";
+									converter += "        this->m_" + camelCaseName + ".clear();\r\n";
 									converter += "        for (int i=0;i<" + QString::number(charlen) + ";i++)\r\n";
 									converter += "        {\r\n";
-									converter += "            " + fieldlist.at(i).second + "[i]=0;\r\n";
-									converter += "            for (int j=0;j<" + QString::number(length) +";j++)\r\n";
-									converter += "            {\r\n";
-									converter += "                " + fieldlist.at(i).second + "[i] += static_cast<" + type + ">(array.at((j-(" + QString::number(bufferpos) + "+1))+(i*" + QString::number(length) + "))) << j*8;\r\n";
-									converter += "            }\r\n";
+									converter += "              this->m_" + camelCaseName + ".append(*reinterpret_cast<" + charstr + "*>(array.data()+" + QString::number(bufferpos) + "));\r\n";
 									converter += "        }\r\n";
-									converter += "        this->m_" + camelCaseName + "=" + fieldlist.at(i).second + ";\r\n\r\n";
 									bufferpos+=length;
-
-									/*converter += "        QString " + fieldlist.at(i).second + " = \"\";\r\n";
-									converter += "        " + fieldlist.at(i).second + "=array.mid(" + QString::number(bufferpos) + "," + QString::number(charlen) +");\r\n";
-									converter += "        this->m_" + camelCaseName + "=" + fieldlist.at(i).second + ";\r\n";
-									bufferpos += charlen;*/
 								}
 								else
 								{
@@ -243,27 +233,25 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 									else
 									{
 										converter += "        " + type + " " + fieldlist.at(i).second + "= 0;\r\n";
-										//converter += "        for (int i=0;i<" + QString::number(length) + ";i++)\r\n";
-										//converter += "        {\r\n";
-										//converter += "            " + fieldlist.at(i).second + "+= static_cast<" + type + ">(array.at(" + QString::number(bufferpos) +"-(i+1))) << i*8;\r\n";
-										//converter += "        }\r\n";
 										converter += "        " + fieldlist.at(i).second + " = *reinterpret_cast<" + fieldlist.at(i).first + "*>(array.data()+" + QString::number(bufferpos) + ");\r\n";
 										converter += "        this->m_" + camelCaseName + " = " + fieldlist.at(i).second + ";\r\n\r\n";
 										bufferpos+=length;
 									}
+
 								}
-								//propertychunk += "Q_PROPERTY(" + type + " " + fieldlist.at(i).second + " READ get" + CamelCaseName +" WRITE set" + CamelCaseName + " NOTIFY " + camelCaseName +"Changed)\r\n";
-								propertychunk += "Q_PROPERTY(" + type + " " + fieldlist.at(i).second + " READ get" + CamelCaseName +" WRITE set" + CamelCaseName + ")\r\n";
-								getchunk += "    " + type + " get" + CamelCaseName + "() { return m_" + camelCaseName + "; }\r\n";
-								setchunk += "    void set" + CamelCaseName + "(" + type + " " + camelCaseName + ") { m_" + camelCaseName +" = " + camelCaseName + "; }\r\n";
-								//setchunk += "    void set" + CamelCaseName + "(" + type + " " + camelCaseName + ") { if (m_" + camelCaseName + " != " + camelCaseName + ") { m_" + camelCaseName +" = " + camelCaseName + "; emit " +camelCaseName + "Changed(" + camelCaseName + "); } }\r\n";
 								if (arraysize == -1)
 								{
+									getchunk += "    " + type + " get" + CamelCaseName + "() { return m_" + camelCaseName + "; }\r\n";
+									setchunk += "    void set" + CamelCaseName + "(" + type + " " + camelCaseName + ") { m_" + camelCaseName +" = " + camelCaseName + "; }\r\n";
 									privatechunk += "    " + type + " m_" + camelCaseName + ";\r\n";
+									propertychunk += "Q_PROPERTY(" + type + " " + fieldlist.at(i).second + " READ get" + CamelCaseName +" WRITE set" + CamelCaseName + ")\r\n";
 								}
 								else
 								{
-									privatechunk += "    " + type + " m_" + camelCaseName + "[" + QString::number(arraysize) +  "];\r\n";
+									getchunk += "    QList<" + type + "> get" + CamelCaseName + "() { return m_" + camelCaseName + "; }\r\n";
+									setchunk += "    void set" + CamelCaseName + "(QList<" + type + "> " + camelCaseName + ") { m_" + camelCaseName +" = " + camelCaseName + "; }\r\n";
+									privatechunk += "    QList<" + type + "> m_" + camelCaseName + ";\r\n";
+									propertychunk += "Q_PROPERTY(QList<" + type + "> " + fieldlist.at(i).second + " READ get" + CamelCaseName +" WRITE set" + CamelCaseName + ")\r\n";
 								}
 
 								signalchunk += "    void " + camelCaseName + "Changed(" + type + ");\r\n";
@@ -279,12 +267,9 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 							classheader += converter;
 							classheader += getchunk;
 							classheader += setchunk;
-							//classheader += "signals:\r\n";
-							//classheader += signalchunk;
 							classheader += "private:\r\n";
 							classheader += privatechunk;
 							classheader += "};\r\n";
-							//ui->textBrowser->append(classheader + "\r\n\r\n");
 							QFile outputfile(outputfolder + "/mavlink_message_" + messagename.toLower() + ".h");
 							mavlink_h_include += "\r\n$$PWD/mavlink_message_" + messagename.toLower() + ".h \\";
 
