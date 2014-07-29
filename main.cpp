@@ -82,7 +82,9 @@ bool compare(const QPair<QString,QString> &first, const QPair<QString,QString> &
 	return false;
 }
 
-
+QString uasobjectslots;
+QString uasobjectsheadersignals;
+QString uasobjectsheaderslots;
 QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 {
 	QPair<QString,QString> retval;
@@ -135,6 +137,10 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 							QString headers = "#include <QObject>\r\n#include <QString>\r\n#include <QByteArray>\r\n#include <stdint.h>\r\n";
 							QString converter = "    void parseFromArray(QByteArray array)\r\n    {\r\n";
 							int bufferpos = 0;
+                            QList<QString> getFunctionList;
+                            QList<QString> setFunctionList;
+                            QList<QString> emitFunctionList;
+                            QList<QString> typelist;
 							for (int i=0;i<fieldlist.size();i++)
 							{
 
@@ -193,6 +199,7 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 								{
 									type = "unsigned char";
 								}
+                                typelist.append(type);
 								if (fieldlist.at(i).first.contains("char["))
 								{
 									QString charstr = fieldlist.at(i).first.mid(0,fieldlist.at(i).first.indexOf("["));
@@ -242,12 +249,18 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 								if (arraysize == -1)
 								{
 									getchunk += "    " + type + " get" + CamelCaseName + "() { return m_" + camelCaseName + "; }\r\n";
+                                    getFunctionList.append("get" + CamelCaseName);
+                                    setFunctionList.append("set" + CamelCaseName);
+                                    emitFunctionList.append(camelCaseName + "Changed");
 									setchunk += "    void set" + CamelCaseName + "(" + type + " " + camelCaseName + ") { m_" + camelCaseName +" = " + camelCaseName + "; }\r\n";
 									privatechunk += "    " + type + " m_" + camelCaseName + ";\r\n";
 									propertychunk += "Q_PROPERTY(" + type + " " + fieldlist.at(i).second + " READ get" + CamelCaseName +" WRITE set" + CamelCaseName + ")\r\n";
 								}
 								else
 								{
+                                    getFunctionList.append("get" + CamelCaseName);
+                                    setFunctionList.append("set" + CamelCaseName);
+                                    emitFunctionList.append(camelCaseName + "Changed");
 									getchunk += "    QList<" + type + "> get" + CamelCaseName + "() { return m_" + camelCaseName + "; }\r\n";
 									setchunk += "    void set" + CamelCaseName + "(QList<" + type + "> " + camelCaseName + ") { m_" + camelCaseName +" = " + camelCaseName + "; }\r\n";
 									privatechunk += "    QList<" + type + "> m_" + camelCaseName + ";\r\n";
@@ -272,6 +285,25 @@ QPair<QString,QString> parseXml(QByteArray commonbytes,QString outputfolder)
 							classheader += "};\r\n";
 							QFile outputfile(outputfolder + "/mavlink_message_" + messagename.toLower() + ".h");
 							mavlink_h_include += "\r\n$$PWD/mavlink_message_" + messagename.toLower() + ".h \\";
+
+                            QString uasobjectslot = "";
+                            uasobjectslot += "void UASObject::" + messagename.toLower() + "Received(const " + newclassname + " &" + messagename.toLower() + ")\r\n";
+                            uasobjectsheaderslots += "void " + messagename.toLower() + "Received(const " + newclassname + " &" + messagename.toLower() + ");\r\n";
+                            uasobjectslot += "{\r\n";
+                            for (int i=0;i<getFunctionList.size();i++)
+                            {
+                                uasobjectslot += "    if (last" + messagename.toLower() + "." + getFunctionList.at(i) +"() != " + messagename.toLower() + "." + getFunctionList.at(i) + "())\r\n";
+                                uasobjectslot += "    {\r\n";
+                                uasobjectslot += "        last" + messagename.toLower() + "." + setFunctionList.at(i) + "(" + messagename.toLower() + "." + getFunctionList.at(i) + "());\r\n";
+                                uasobjectslot += "        emit " + emitFunctionList.at(i) + "(" + messagename.toLower() + "." + getFunctionList.at(i) + "());\r\n";
+                                uasobjectsheadersignals += "void " + emitFunctionList.at(i) + "(" + typelist.at(i) +")\r\n";
+
+                                uasobjectslot += "    }\r\n";
+                            }
+                            uasobjectslot += "}\r\n";
+                            uasobjectslots += uasobjectslot;
+
+
 
 							qDebug() << "Outputting to:" << outputfile.fileName();
 							outputfile.open(QIODevice::ReadWrite | QIODevice::Truncate);
@@ -390,6 +422,21 @@ int main(int argc, char *argv[])
 	mavlink_pri.open(QIODevice::ReadWrite | QIODevice::Truncate);
 	mavlink_pri.write(headerlist.toAscii());
 	mavlink_pri.close();
+    QFile mavlink_uasobject(outputdir + "/uasobjects.cpp");
+    mavlink_uasobject.open(QIODevice::ReadWrite | QIODevice::Truncate);
+    mavlink_uasobject.write(uasobjectslots.toAscii());
+    mavlink_uasobject.close();
+
+    QFile mavlink_uasobject_header(outputdir + "/uasobjects.h");
+    mavlink_uasobject_header.open(QIODevice::ReadWrite | QIODevice::Truncate);
+    mavlink_uasobject_header.write("signals:\r\n");
+    mavlink_uasobject_header.write(uasobjectsheadersignals.toAscii());
+    mavlink_uasobject_header.write("slots:\r\n");
+    mavlink_uasobject_header.write(uasobjectsheaderslots.toAscii());
+    mavlink_uasobject_header.close();
+
+
+
 	return 0;
 
 
